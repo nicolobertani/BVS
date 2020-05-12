@@ -113,7 +113,7 @@ List rcpp_Dirac_SS(const mat &X, const vec &y, const int &n_samples, const doubl
     // sample active coefficients
     k_perm = randperm(k);
     for (int i = 0; i < k; i++) {
-      pip = 1 / (1 + rcpp_ratio(delta_vec, k_perm(i), X, y, 1, 1) * (1 - fixed_omega) / fixed_omega);
+      pip = 1 / (1 + rcpp_ratio(delta_vec, k_perm(i), X, y, sigma_sq_draw, psi_draw) * (1 - fixed_omega) / fixed_omega);
       delta_vec(k_perm(i)) = randu() < pip;
     }
     active_size = sum(delta_vec);
@@ -152,7 +152,7 @@ List rcpp_Dirac_SS(const mat &X, const vec &y, const int &n_samples, const doubl
       }
       // update sigma_sq_draw
       s_N = s_0 + (n - 1) / 2;
-      S_N = S_N + as_scalar(dot(y, y) - a_N.t() * inv_A_N * a_N) / 2;
+      S_N = S_0 + (dot(y, y) - as_scalar(a_N.t() * inv_A_N * a_N)) / 2;
       sigma_sq_draw = 1 / randg(distr_param(s_N, 1 / S_N));
     }
     // update psi_draw
