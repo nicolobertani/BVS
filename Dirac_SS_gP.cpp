@@ -63,7 +63,7 @@ double r_beta(const double &v, const double &V) {
 // [[Rcpp::export]]
 List rcpp_Dirac_SS_g(const mat &X, const vec &y, const int &n_samples, const double &burn_in,
   const double s_0 = .001, const double S_0 = .001,
-  const bool update_psi = 1, const double fixed_psi = 1, const double b_0 = .5, const double B_0 = .5,
+  const bool update_g = 0, const double fixed_g = 1, const double b_0 = .5, const double B_0 = .5,
   const bool update_omega = 1, const double fixed_omega = .5, const double v_0 = 1, const double V_0 = 1
 ) {
   // initialization of utilities
@@ -79,22 +79,21 @@ List rcpp_Dirac_SS_g(const mat &X, const vec &y, const int &n_samples, const dou
   imat delta_out(n_samples, k, fill::zeros);
   mat beta_out(n_samples, k, fill::zeros);
   vec sigma_sq_out(n_samples, fill::zeros);
-  vec psi_out(n_samples, fill::zeros);
+  vec g_out(n_samples, fill::zeros);
   vec omega_out(n_samples, fill::zeros);
   int saving_iteration = 0;
   // initial guesses
   ivec delta_vec = randi(k, distr_param(0, 1));
   double sigma_sq_draw = var(y);
-  double psi_draw;
+  double g_draw;
   mat inv_A_N, A_N;
-  vec inv_A_0_v(k);
   vec a_N(k, fill::zeros);
   vec beta_draw(k, fill::zeros);
   vec beta_active_draw(k, fill::zeros);
-  if (update_psi) {
-    psi_draw = 1 / randg(distr_param(b_0, 1 / B_0));
+  if (update_g) {
+    g_draw = 1 / randg(distr_param(b_0, 1 / B_0));
   } else {
-    psi_draw = fixed_psi;
+    g_draw = fixed_g;
   }
   double omega_draw;
   if (update_omega) {
@@ -107,7 +106,7 @@ List rcpp_Dirac_SS_g(const mat &X, const vec &y, const int &n_samples, const dou
     // sample active coefficients
     k_perm = randperm(k);
     for (int i = 0; i < k; i++) {
-      pip = 1 / (1 + rcpp_ratio(delta_vec, k_perm(i), X, y, sigma_sq_draw, psi_draw) * (1 - fixed_omega) / fixed_omega);
+      pip = 1 / (1 + rcpp_ratio(delta_vec, k_perm(i), X, y, sigma_sq_draw, g_draw) * (1 - fixed_omega) / fixed_omega);
       delta_vec(k_perm(i)) = randu() < pip;
     }
     active_size = sum(delta_vec);
@@ -129,15 +128,13 @@ List rcpp_Dirac_SS_g(const mat &X, const vec &y, const int &n_samples, const dou
       }
       X_active = X.cols(active_col_id);
       // resize beta parameters
-      inv_A_0_v.set_size(active_size);
       inv_A_N.set_size(active_size, active_size);
       A_N.set_size(active_size, active_size);
       a_N.set_size(active_size);
       beta_active_draw.set_size(active_size);
       beta_draw.zeros();
       // update beta_draw and beta_active_draw
-      inv_A_0_v.fill(1 / psi_draw);
-      inv_A_N = X_active.t() * X_active + diagmat(inv_A_0_v);
+      inv_A_N = (g_draw + 1) / g_draw * X_active.t() * X_active;
       A_N = inv_sympd(inv_A_N);
       a_N = A_N * (X_active.t() * y);
       beta_active_draw = mvnrnd(a_N, sigma_sq_draw * A_N);
@@ -150,10 +147,10 @@ List rcpp_Dirac_SS_g(const mat &X, const vec &y, const int &n_samples, const dou
       sigma_sq_draw = 1 / randg(distr_param(s_N, 1 / S_N));
     }
     // update psi_draw
-    if (update_psi) {
+    if (update_g) {
       b_N = b_0 + active_size / 2;
       B_N = B_0 + dot(beta_active_draw, beta_active_draw) / (2 * sigma_sq_draw);
-      psi_draw = 1 / randg(distr_param(b_N, 1 / B_N));
+      g_draw = 1 / randg(distr_param(b_N, 1 / B_N));
     }
     // update omega_draw
     if (update_omega) {
@@ -166,7 +163,7 @@ List rcpp_Dirac_SS_g(const mat &X, const vec &y, const int &n_samples, const dou
       delta_out.row(saving_iteration) = delta_vec.t();
       beta_out.row(saving_iteration) = beta_draw.t();
       sigma_sq_out(saving_iteration) = sigma_sq_draw;
-      if (update_psi) {psi_out(saving_iteration) = psi_draw;}
+      if (update_g) {g_out(saving_iteration) = g_draw;}
       if (update_omega) {omega_out(saving_iteration) = omega_draw;}
       saving_iteration++;
     }
@@ -175,10 +172,10 @@ List rcpp_Dirac_SS_g(const mat &X, const vec &y, const int &n_samples, const dou
   out(0) = delta_out;
   out(1) = beta_out;
   out(2) = sigma_sq_out;
-  if (update_psi) {
-    out(3) = psi_out;
+  if (update_g) {
+    out(3) = g_out;
   } else {
-    out(3) = fixed_psi;
+    out(3) = fixed_g;
   }
   if (update_omega) {
     out(4) = omega_out;
