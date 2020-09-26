@@ -1,3 +1,21 @@
+/*
+High performance Bayesian Variable Selection for R using C++ via Rcpp and RcppArmadillo
+Copyright (C) 2020  Nicolò Bertani
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 #include <RcppArmadillo.h>
 // [[Rcpp::depends(RcppArmadillo)]]
 
@@ -67,7 +85,7 @@ double r_beta(const double &v, const double &V) {
 
 
 // [[Rcpp::export]]
-List rcpp_Dirac_SS(const mat &X, const vec &y, const int &n_samples, const double &burn_in,
+List rcpp_Dirac_SS_i(const mat &X, const vec &y, const int &n_samples, const double &burn_in,
   const double s_0 = .001, const double S_0 = .001,
   const bool update_psi = 1, const double fixed_psi = 1, const double b_0 = .5, const double B_0 = .5,
   const bool update_omega = 1, const double fixed_omega = .5, const double v_0 = 1, const double V_0 = 1
