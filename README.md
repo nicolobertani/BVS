@@ -1,6 +1,6 @@
-## README
+## High performance BVS
 
-The software in this repository efficiently implements a subset of the Bayesian Variable Selection techniques generally referred to as Spike-and-Slab regression.
+The software in this repository efficiently implements a subset of the Bayesian Variable Selection (BVS) techniques generally referred to as Spike-and-Slab regression.
 
 More specifically:
 
@@ -15,6 +15,7 @@ Malsiner-Walli, G. and Wagner, H. (2018). Comparing spike and slab priors for ba
 
 The software is written in C++ for performance, and is meant for usage in R via [Rcpp](https://cran.r-project.org/web/packages/Rcpp/index.html) and [RcppArmadillo](https://cran.r-project.org/web/packages/RcppArmadillo/index.html).
 
+This project is ongoing. Contributions are welcome.
 
 ### License
 
