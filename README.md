@@ -1,4 +1,4 @@
-## High performance BVS
+# High performance BVS
 
 The software in this repository efficiently implements a subset of the Bayesian Variable Selection (BVS) techniques generally referred to as Spike-and-Slab regression.
 
