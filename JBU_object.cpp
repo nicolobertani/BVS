@@ -8,9 +8,16 @@ using namespace arma;
 class JBU_model {
 
   mat m_X_block, m_y_mx;
-  double m_psi = pow(10, 4);
   umat m_delta;
   sp_mat m_X_alpha;
+  // hyperparameters
+  double m_psi = pow(10, 4); // beta
+  double a_1 = 5; // tau
+  double a_2 = 50; // tau
+  double epsilon = .005; // gamma
+  double m_w = .5; // omega
+  double m_v_0;
+  mat m_S_0;
 
   // FILTER
   /* calculate individual approximate posterior probability
@@ -24,6 +31,15 @@ class JBU_model {
     return log(A_N) - (m_X_block.n_rows - 1) * log(B);
   }
   // SAMPLER
+  void set_Wishart_hp (const bool &RATS) {
+    if (RATS) {
+      m_v_0 = m_y_mx.n_cols * (m_delta.n_rows + 1) - 2; //RATS
+    } else {
+      m_v_0 = m_y_mx.n_cols + 1; // Jeffrey's
+    }
+    m_S_0.eye(m_y_mx.n_cols, m_y_mx.n_cols);
+    m_S_0 = m_S_0 * m_v_0;
+  }
 
 public:
   // FILTER
@@ -44,22 +60,30 @@ public:
         pip(j) = calculate_pip(i, j, yTy);
       }
       order_v = sort_index(pip, "descent");
-      m_delta.col(i) = order_v.head(K); // not sorting
+      m_delta.col(i) = sort(order_v.head(K)); // sorting
     }
   }
-  // approximate Dirac filter: return m_delta
   umat get_delta_mx () { return m_delta; }
 
-  // X_alpha
+  // create block diagional covariate matrix X_alpha
   void fill_X_alpha () {
     m_X_alpha.set_size(m_X_block.n_rows * m_y_mx.n_cols, m_delta.n_rows * m_y_mx.n_cols);
     for (uword i = 0; i < m_y_mx.n_cols; i++) {
-      m_X_alpha.submat(i * m_X_block.n_rows, i * m_delta.n_rows,
-        (i + 1) * m_X_block.n_rows - 1, (i + 1) * m_delta.n_rows - 1) = m_X_block.cols(m_delta.col(i));
+      m_X_alpha.submat(
+        i * m_X_block.n_rows, i * m_delta.n_rows,
+        (i + 1) * m_X_block.n_rows - 1, (i + 1) * m_delta.n_rows - 1
+      ) = m_X_block.cols(m_delta.col(i));
     }
   }
+  mat get_X_alpha () { return mat(m_X_alpha); }
 
   // SAMPLER
+  void sample(const bool &RATS, const bool &large) {
+    // hyperparameters Wishart
+    set_Wishart_hp(RATS);
+    cout << m_v_0 << "\n";
+  }
+
 };
 
 /*
@@ -77,10 +101,21 @@ umat JBU_filter (const mat &X_block, const mat &y_mx, const int &K) {
 }
 
 // [[Rcpp::export]]
-void test(const mat &X_block, const mat &y_mx, const int &K) {
+mat JBU_X_alpha(const mat &X_block, const mat &y_mx, const int &K) {
   JBU_model mod;
   mod.set_X_block(X_block);
   mod.set_y_mx(y_mx);
   mod.filter(K);
   mod.fill_X_alpha();
+  return mod.get_X_alpha();
+}
+
+// [[Rcpp::export]]
+void test(const mat &X_block, const mat &y_mx, const int &K, const bool &RATS, const bool &large) {
+  JBU_model mod;
+  mod.set_X_block(X_block);
+  mod.set_y_mx(y_mx);
+  mod.filter(K);
+  mod.fill_X_alpha();
+  mod.sample(RATS, large);
 }
