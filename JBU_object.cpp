@@ -18,11 +18,17 @@ vec r_binom(const int &n, const vec &p) {
 vec r_gamma(const int &n, const double &shape, const vec &rate) {
   Function r_gamma("rgamma");
   NumericVector tmp = r_gamma(_["n"] = n, _["shape"] = shape, _["rate"] = rate);
-  vec out(tmp.n_elem);
-  for (uword i = 0; i < tmp.n_elem; i++) {
+  vec out(rate.n_elem);
+  for (uword i = 0; i < rate.n_elem; i++) {
     out(i) = tmp[i];
   }
   return out;
+}
+
+double r_beta(const double &v, const double &V) {
+  Function r_beta("rbeta");
+  NumericVector out = r_beta(1, _["shape1"] = v, _["shape2"] = V);
+  return out[0];
 }
 
 
@@ -76,7 +82,7 @@ class JBU_model {
     mat UX = chol_U_Inv_Sigma * m_X_alpha;
     vec U_y_vec = chol_U_Inv_Sigma * y_vec;
     for (uword b = 0; b < blocks; b++) {
-      uvec selector = ;
+      // uvec selector = ;
       /* code */
     }
   }
@@ -99,9 +105,31 @@ class JBU_model {
   // m_inv_tau_sq_draw = r_gamma(m_inv_tau_sq_draw.n_elem, m_a_1 + .5, a_N_2);
   m_inv_tau_sq_draw = (m_a_1 + .5) / a_N_2;
 }
+  void w_update() {
+    double v, V;
+    v = 1 + sum(m_kappa_draw == 1);
+    V = 1 + sum(m_kappa_draw == m_epsilon);
+    // draw
+    m_w = r_beta(v, V);
+  }
   void GRR_update() { m_GRR_mx = diagmat(m_inv_tau_sq_draw / m_kappa_draw); }
-  void w_update() {}
-  void inv_Sigma_update () {}
+  void inv_Sigma_update (const vec &y_vec) {
+    double v_N;
+    vec r_vec;
+    mat S_N, inv_S_N, r_mx;
+    r_vec = y_vec - m_X_alpha * m_beta_draw;
+    r_mx.set_size(m_X_block.n_rows, m_y_mx.n_cols);
+    for (uword i = 0; i < m_y_mx.n_cols; i++) {
+      r_mx.col(i) = r_vec.subvec(i * m_X_block.n_rows, (i + 1) * m_X_block.n_rows - 1);
+    }
+    v_N = m_v_0 + m_X_block.n_rows + m_y_mx.n_cols;
+    S_N = m_S_0 + r_mx.t() * r_mx;
+    cout << "Is sympd " << S_N.is_sympd() << "\n";
+    inv_S_N = inv_sympd(S_N);
+    // draw
+    // m_inv_Sigma = wishrnd(inv_S_N, v_N);
+    m_inv_Sigma = inv_S_N;
+  }
 
 
 
