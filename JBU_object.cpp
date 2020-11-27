@@ -4,12 +4,22 @@
 using namespace Rcpp;
 using namespace arma;
 
-
+// r drawing functions
 vec r_binom(const int &n, const vec &p) {
   Function r_binom("rbinom");
   NumericVector tmp = r_binom(_["n"] = n, _["size"] = 1, _["prob"] = p);
   vec out(p.n_elem);
   for (uword i = 0; i < p.n_elem; i++) {
+    out(i) = tmp[i];
+  }
+  return out;
+}
+
+vec r_gamma(const int &n, const double &shape, const vec &rate) {
+  Function r_gamma("rgamma");
+  NumericVector tmp = r_gamma(_["n"] = n, _["shape"] = shape, _["rate"] = rate);
+  vec out(tmp.n_elem);
+  for (uword i = 0; i < tmp.n_elem; i++) {
     out(i) = tmp[i];
   }
   return out;
@@ -62,10 +72,11 @@ class JBU_model {
     m_inv_Sigma.set_size(m_y_mx.n_cols, m_y_mx.n_cols);
     m_inv_Sigma.eye();
   }
-  vec beta_update(const mat &chol_U_Inv_Sigma, const vec &y_vec, const int blocks) {
+  void beta_update(const mat &chol_U_Inv_Sigma, const vec &y_vec, const int &blocks) {
     mat UX = chol_U_Inv_Sigma * m_X_alpha;
     vec U_y_vec = chol_U_Inv_Sigma * y_vec;
     for (uword b = 0; b < blocks; b++) {
+      uvec selector = ;
       /* code */
     }
   }
@@ -76,13 +87,21 @@ class JBU_model {
     w_1 = exp(log(1 - m_w) - .5 * log(m_epsilon) - sd_term / m_epsilon);
     w_2 = exp(log(m_w) - sd_term);
     // draw
-    v = r_binom(m_beta_draw.n_elem, w_1 / (w_1 + w_2));
-    m_kappa_draw = m_epsilon * v + (1 - v);
+    /*v = r_binom(m_beta_draw.n_elem, w_1 / (w_1 + w_2));
+    m_kappa_draw = m_epsilon * v + (1 - v);*/
+    m_kappa_draw = m_beta_draw.n_elem, w_1 / (w_1 + w_2);
   }
-  vec inv_tau_sq_update () {}
+  void inv_tau_sq_update () {
+  vec beta_sq, a_N_2;
+  beta_sq = pow(m_beta_draw, 2);
+  a_N_2 = m_a_2 + .5 * beta_sq / m_kappa_draw;
+  // draw
+  // m_inv_tau_sq_draw = r_gamma(m_inv_tau_sq_draw.n_elem, m_a_1 + .5, a_N_2);
+  m_inv_tau_sq_draw = (m_a_1 + .5) / a_N_2;
+}
   void GRR_update() { m_GRR_mx = diagmat(m_inv_tau_sq_draw / m_kappa_draw); }
-  double w_update() {}
-  mat inv_Sigma_update () {}
+  void w_update() {}
+  void inv_Sigma_update () {}
 
 
 
@@ -124,7 +143,8 @@ public:
   mat get_X_alpha () { return mat(m_X_alpha); }
 
   // SAMPLER
-  void sample(const bool &RATS, const bool &large, const int &iterations) {
+  List sample(const bool &RATS, const bool &large, const int &iterations) {
+    List out(4);
     // helpers
     mat Kron_hlpr(m_X_block.n_rows, m_X_block.n_rows, fill::eye);
     // hyperparameters Wishart
@@ -136,9 +156,13 @@ public:
     vec y_vec = vectorise(m_y_mx);
 
     for (size_t iter = 0; iter < iterations; iter++) {
-
-      /* code */
+      kappa_update();
     }
+    out(0) = m_beta_draw;
+    out(1) = m_kappa_draw;
+    out(2) = m_inv_tau_sq_draw;
+    out(3) = m_inv_Sigma;
+    return out;
   }
 
 };
@@ -168,11 +192,12 @@ mat JBU_X_alpha(const mat &X_block, const mat &y_mx, const int &K) {
 }
 
 // [[Rcpp::export]]
-void test(const mat &X_block, const mat &y_mx, const int &K, const bool &RATS, const bool &large) {
+List test(const mat &X_block, const mat &y_mx, const int &K, const bool &RATS, const bool &large) {
   JBU_model mod;
   mod.set_X_block(X_block);
   mod.set_y_mx(y_mx);
   mod.filter(K);
   mod.fill_X_alpha();
-  mod.sample(RATS, large, 1);
+  List out = mod.sample(RATS, large, 1);
+  return out;
 }
