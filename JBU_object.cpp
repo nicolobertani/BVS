@@ -81,9 +81,28 @@ class JBU_model {
   void beta_update(const mat &chol_U_Inv_Sigma, const vec &y_vec, const int &blocks) {
     mat UX = chol_U_Inv_Sigma * m_X_alpha;
     vec U_y_vec = chol_U_Inv_Sigma * y_vec;
-    for (uword b = 0; b < blocks; b++) {
-      // uvec selector = ;
-      /* code */
+    double q = floor(U_y_vec.n_elem / blocks);
+    for (uword j = 0; j < blocks; j++) {
+      mat UX_j, R_mx_j, inv_B_N_j, B_N_j, UX_shed;
+      vec b_N_j, beta_draw_shed, end_vec(2);
+      int start = j * q;
+      end_vec(1) = (j + 1) * q;
+      end_vec(2) = U_y_vec.n_elem;
+      int end = min(end) - 1;
+      //
+      UX_j = UX.cols(span(start, end));
+      R_mx_j = m_GRR_mx.submat(span(start, end), span(start, end));
+      inv_B_N_j = R_mx_j + UX_j.t() * UX_j;
+      cout << "Is sympd " << inv_B_N_j.is_sympd() << "\n";
+      B_N_j = inv_sympd(inv_B_N_j);
+      UX_shed = UX;
+      UX_shed.shed_cols(start, end);
+      beta_draw_shed = m_beta_draw;
+      beta_draw_shed.shed_rows(start, end);
+      b_N_j = B_N_j * UX_j.t() * (U_y_vec - UX_shed * beta_draw_shed);
+      // draw
+      // m_beta_draw.subvec(start, end) = mvnrnd(b_N_j, B_N_j);
+      m_beta_draw.subvec(start, end) = b_N_j;
     }
   }
   void kappa_update () {
