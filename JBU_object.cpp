@@ -5,6 +5,17 @@ using namespace Rcpp;
 using namespace arma;
 
 
+vec r_binom(const int &n, const vec &p) {
+  Function r_binom("rbinom");
+  NumericVector tmp = r_binom(_["n"] = n, _["size"] = 1, _["prob"] = p);
+  vec out(p.n_elem);
+  for (uword i = 0; i < p.n_elem; i++) {
+    out(i) = tmp[i];
+  }
+  return out;
+}
+
+
 class JBU_model {
 
   mat m_X_block, m_y_mx;
@@ -12,12 +23,15 @@ class JBU_model {
   sp_mat m_X_alpha;
   // hyperparameters
   double m_psi = pow(10, 4); // beta
-  double a_1 = 5; // tau
-  double a_2 = 50; // tau
-  double epsilon = .005; // gamma
+  double m_a_1 = 5; // tau
+  double m_a_2 = 50; // tau
+  double m_epsilon = .005; // gamma
   double m_w = .5; // omega
   double m_v_0;
   mat m_S_0;
+  // sampler draws
+  vec m_kappa_draw, m_inv_tau_sq_draw, m_beta_draw;
+  mat m_inv_Sigma, m_GRR_mx;
 
   // FILTER
   /* calculate individual approximate posterior probability
@@ -40,6 +54,38 @@ class JBU_model {
     m_S_0.eye(m_y_mx.n_cols, m_y_mx.n_cols);
     m_S_0 = m_S_0 * m_v_0;
   }
+  void set_initial_draws () {
+    m_kappa_draw.set_size(m_delta.n_elem);
+    m_kappa_draw.ones();
+    m_inv_tau_sq_draw.set_size(m_delta.n_elem);
+    m_inv_tau_sq_draw.fill(1 / pow(10, 6));
+    m_inv_Sigma.set_size(m_y_mx.n_cols, m_y_mx.n_cols);
+    m_inv_Sigma.eye();
+  }
+  vec beta_update(const mat &chol_U_Inv_Sigma, const vec &y_vec, const int blocks) {
+    mat UX = chol_U_Inv_Sigma * m_X_alpha;
+    vec U_y_vec = chol_U_Inv_Sigma * y_vec;
+    for (uword b = 0; b < blocks; b++) {
+      /* code */
+    }
+  }
+  void kappa_update () {
+    vec beta_sq, sd_term, w_1, w_2, v;
+    beta_sq = pow(m_beta_draw, 2);
+    sd_term = .5 * m_inv_tau_sq_draw * beta_sq;
+    w_1 = exp(log(1 - m_w) - .5 * log(m_epsilon) - sd_term / m_epsilon);
+    w_2 = exp(log(m_w) - sd_term);
+    // draw
+    v = r_binom(m_beta_draw.n_elem, w_1 / (w_1 + w_2));
+    m_kappa_draw = m_epsilon * v + (1 - v);
+  }
+  vec inv_tau_sq_update () {}
+  void GRR_update() { m_GRR_mx = diagmat(m_inv_tau_sq_draw / m_kappa_draw); }
+  double w_update() {}
+  mat inv_Sigma_update () {}
+
+
+
 
 public:
   // FILTER
@@ -78,10 +124,21 @@ public:
   mat get_X_alpha () { return mat(m_X_alpha); }
 
   // SAMPLER
-  void sample(const bool &RATS, const bool &large) {
+  void sample(const bool &RATS, const bool &large, const int &iterations) {
+    // helpers
+    mat Kron_hlpr(m_X_block.n_rows, m_X_block.n_rows, fill::eye);
     // hyperparameters Wishart
     set_Wishart_hp(RATS);
-    cout << m_v_0 << "\n";
+    // initial draws
+    set_initial_draws();
+    GRR_update();
+    mat chol_U_Inv_Sigma = kron(m_inv_Sigma, Kron_hlpr);
+    vec y_vec = vectorise(m_y_mx);
+
+    for (size_t iter = 0; iter < iterations; iter++) {
+
+      /* code */
+    }
   }
 
 };
@@ -117,5 +174,5 @@ void test(const mat &X_block, const mat &y_mx, const int &K, const bool &RATS, c
   mod.set_y_mx(y_mx);
   mod.filter(K);
   mod.fill_X_alpha();
-  mod.sample(RATS, large);
+  mod.sample(RATS, large, 1);
 }
