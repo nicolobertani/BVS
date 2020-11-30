@@ -48,6 +48,11 @@ class JBU_model {
   // sampler draws
   vec m_kappa_draw, m_inv_tau_sq_draw, m_beta_draw;
   mat m_inv_Sigma, m_GRR_mx;
+  // sampler storage - average
+  double m_w_avg;
+  vec m_kappa_avg, m_inv_tau_sq_avg, m_beta_avg;
+  mat m_inv_Sigma_avg;
+
 
   // FILTER
   /* calculate individual approximate posterior probability
@@ -80,6 +85,18 @@ class JBU_model {
     m_inv_Sigma.set_size(m_y_mx.n_cols, m_y_mx.n_cols);
     m_inv_Sigma.eye();
   }
+  void initialize_avg () {
+    m_w_avg = 0;
+    m_beta_avg.copy_size(m_beta_draw);
+    m_beta_avg.zeros();
+    m_kappa_avg.copy_size(m_kappa_draw);
+    m_kappa_avg.zeros();
+    m_inv_tau_sq_avg.copy_size(m_inv_tau_sq_draw);
+    m_inv_tau_sq_avg.zeros();
+    m_inv_Sigma_avg.copy_size(m_inv_Sigma);
+    m_inv_Sigma_avg.zeros();
+  }
+  // update functions
   void beta_update(const mat &chol_U_Inv_Sigma, const vec &y_vec, const double &blocks) {
     mat UX = chol_U_Inv_Sigma * m_X_alpha;
     vec U_y_vec = chol_U_Inv_Sigma * y_vec;
@@ -103,8 +120,7 @@ class JBU_model {
       beta_draw_shed.shed_rows(start, end);
       b_N_j = B_N_j * UX_j.t() * (U_y_vec - UX_shed * beta_draw_shed);
       // draw
-      // m_beta_draw.subvec(start, end) = mvnrnd(b_N_j, B_N_j);
-      m_beta_draw.subvec(start, end) = b_N_j;
+      m_beta_draw.subvec(start, end) = mvnrnd(b_N_j, B_N_j);
     }
   }
   void kappa_update () {
@@ -114,8 +130,7 @@ class JBU_model {
     w_1 = exp(log(1 - m_w) - .5 * log(m_epsilon) - sd_term / m_epsilon);
     w_2 = exp(log(m_w) - sd_term);
     // draw
-    // v = r_binom(m_beta_draw.n_elem, w_1 / (w_1 + w_2));
-    v = round(w_1 / (w_1 + w_2));
+    v = r_binom(m_beta_draw.n_elem, w_1 / (w_1 + w_2));
     m_kappa_draw = m_epsilon * v + (1 - v);
   }
   void inv_tau_sq_update () {
@@ -123,16 +138,14 @@ class JBU_model {
   beta_sq = pow(m_beta_draw, 2);
   a_N_2 = m_a_2 + .5 * beta_sq / m_kappa_draw;
   // draw
-  // m_inv_tau_sq_draw = r_gamma(m_inv_tau_sq_draw.n_elem, m_a_1 + .5, a_N_2);
-  m_inv_tau_sq_draw = (m_a_1 + .5) / a_N_2;
+  m_inv_tau_sq_draw = r_gamma(m_inv_tau_sq_draw.n_elem, m_a_1 + .5, a_N_2);
 }
   void w_update() {
     double v, V;
     v = 1 + sum(m_kappa_draw == 1);
     V = 1 + sum(m_kappa_draw != 1);
     // draw
-    // m_w = r_beta(v, V);
-    m_w = (v / V);
+    m_w = r_beta(v, V);
   }
   void GRR_update() { m_GRR_mx = diagmat(m_inv_tau_sq_draw / m_kappa_draw); }
   void inv_Sigma_update (const vec &y_vec) {
@@ -148,11 +161,24 @@ class JBU_model {
     S_N = m_S_0 + r_mx.t() * r_mx;
     inv_S_N = inv_sympd(S_N);
     // draw
-    // m_inv_Sigma = wishrnd(inv_S_N, v_N);
-    m_inv_Sigma = inv_S_N;
+    m_inv_Sigma = wishrnd(inv_S_N, v_N);
   }
-
-
+  // STORE SAMPLES
+  void update_avg() {
+    m_beta_avg += m_beta_draw;
+    m_kappa_avg += m_kappa_draw;
+    m_inv_tau_sq_avg += m_inv_tau_sq_draw;
+    m_w_avg += m_w;
+    m_inv_Sigma_avg += m_inv_Sigma;
+  }
+  void normalize_avg (const int &iterations, const int &burn) {
+    double n = iterations - burn;
+    m_beta_avg /= n;
+    m_kappa_avg /= n;
+    m_inv_tau_sq_avg /= n;
+    m_w_avg /= n;
+    m_inv_Sigma_avg /= n;
+  }
 
 
 public:
@@ -192,14 +218,15 @@ public:
   mat get_X_alpha () { return mat(m_X_alpha); }
 
   // SAMPLER
-  List sample(const bool &RATS, const int &iterations, const double &blocks) {
-    List out(6);
+  void sample(const bool &RATS, const double &blocks, const int &iterations, const int &burn, const bool &point) {
+    List out(5);
     // helpers
     mat Kron_hlpr(m_X_block.n_rows, m_X_block.n_rows, fill::eye);
     // hyperparameters Wishart
     set_Wishart_hp(RATS);
     // initial draws
     set_initial_draws();
+    initialize_avg();
     GRR_update();
     mat chol_U_inv_Sigma = chol(m_inv_Sigma);
     mat chol_U_Inv_Sigma = kron(chol_U_inv_Sigma, Kron_hlpr);
@@ -213,16 +240,27 @@ public:
       inv_Sigma_update(y_vec);
       chol_U_inv_Sigma = chol(m_inv_Sigma);
       chol_U_Inv_Sigma = kron(chol_U_inv_Sigma, Kron_hlpr);
+      if (point) {
+        if (iter >= burn) {
+          update_avg();
+        }
+      }
     }
-    out(0) = m_beta_draw;
-    out(1) = m_kappa_draw;
-    out(2) = m_inv_tau_sq_draw;
-    out(3) = m_GRR_mx;
-    out(4) = m_w;
-    out(5) = m_inv_Sigma;
+    if (point) {
+      normalize_avg(iterations, burn);
+    }
+  }
+  List prep_output (const bool point) {
+    List out(5);
+    if (point) {
+      out(0) = m_beta_avg;
+      out(1) = m_kappa_avg;
+      out(2) = 1 / m_inv_tau_sq_avg;
+      out(3) = m_w_avg;
+      out(4) = m_inv_Sigma_avg.i();
+    }
     return out;
   }
-
 };
 
 /*
@@ -250,12 +288,18 @@ mat JBU_X_alpha(const mat &X_block, const mat &y_mx, const int &K) {
 }
 
 // [[Rcpp::export]]
-List test(const mat &X_block, const mat &y_mx, const int &K, const bool &RATS, const int &iterations, const double &blocks) {
+List JBU_sample(const mat &X_block, const mat &y_mx, const int &K,
+  const bool RATS = 1, const double blocks = 1,
+  const int iterations = 1000, const int burn = 200,
+  const bool point = true
+) {
+  List out;
   JBU_model mod;
   mod.set_X_block(X_block);
   mod.set_y_mx(y_mx);
   mod.filter(K);
   mod.fill_X_alpha();
-  List out = mod.sample(RATS, iterations, blocks);
+  mod.sample(RATS, blocks, iterations, burn, point);
+  out = mod.prep_output(point);
   return out;
 }
