@@ -47,7 +47,7 @@ class JBU_model {
   mat m_S_0;
   // sampler draws
   vec m_kappa_draw, m_inv_tau_sq_draw, m_beta_draw;
-  mat m_inv_Sigma, m_GRR_mx;
+  mat m_inv_Sigma, m_GRR_mx, m_Sigma;
   // sampler storage - average
   double m_w_avg;
   vec m_kappa_avg, m_inv_tau_sq_avg, m_beta_avg;
@@ -57,7 +57,7 @@ class JBU_model {
   mat m_kappa_list, m_tau_sq_list, m_beta_list;
   cube m_Sigma_list;
   // sampler storage - posterior sample
-  mat m_post_sample;
+  cube m_post_sample;
 
   // FILTER
   /* calculate individual approximate posterior probability
@@ -101,16 +101,16 @@ class JBU_model {
     m_inv_Sigma_avg.copy_size(m_inv_Sigma);
     m_inv_Sigma_avg.zeros();
   }
-  void initialize_lists (const int &iterations, const int &burn, const bool &get_post) {
+  void initialize_lists (const int &iterations, const int &burn) {
     int n = iterations - burn;
     m_w_list.set_size(n);
     m_beta_list.set_size(m_delta.n_elem, n);
     m_kappa_list.set_size(m_delta.n_elem, n);
     m_tau_sq_list.set_size(m_delta.n_elem, n);
     m_Sigma_list.set_size(m_y_mx.n_cols, m_y_mx.n_cols, n);
-    if (get_post) {
-      m_post_sample.set_size(m_delta.n_elem, n);
-    }
+  }
+  void initialize_post_sample (const int &iterations, const int &burn, const int &step_ahead) {
+    m_post_sample.set_size(step_ahead, m_y_mx.n_cols, iterations - burn);
   }
   // update functions
   void beta_update(const mat &chol_U_Inv_Sigma, const vec &y_vec, const double &blocks) {
@@ -179,6 +179,8 @@ class JBU_model {
     // draw
     m_inv_Sigma = wishrnd(inv_S_N, v_N);
   }
+  void compute_Sigma() {m_Sigma = inv_sympd(m_inv_Sigma);}
+
   // STORE SAMPLES
   void update_avg() {
     m_beta_avg += m_beta_draw;
@@ -187,16 +189,27 @@ class JBU_model {
     m_w_avg += m_w;
     m_inv_Sigma_avg += m_inv_Sigma;
   }
-  void update_lists(const int &iter, const int &burn, const bool &get_post) {
+  void update_lists(const int &iter, const int &burn) {
     uword n = iter - burn;
     m_w_list(n) = m_w;
     m_beta_list.col(n) = m_beta_draw;
     m_kappa_list.col(n) = m_kappa_draw;
     m_tau_sq_list.col(n) = 1 / m_inv_tau_sq_draw;
-    m_Sigma_list.slice(n) = inv_sympd(m_inv_Sigma);
-    if (get_post) {
-      cout << "get post is true.\n";
+    m_Sigma_list.slice(n) = m_Sigma;
+  }
+  void update_post_sample(const int &iter, const int &burn, const int &step_ahead) {
+    uword n = iter - burn;
+    mat X_pred(m_delta.n_rows + step_ahead, m_y_mx.n_cols, fill::zeros);
+    X_pred.head_rows(m_delta.n_rows) = m_y_mx.tail_rows(m_delta.n_rows);
+    for (uword i = 0; i < step_ahead; i++) {
+      sp_mat X_tmp(m_delta.n_rows * m_y_mx.n_cols, m_y_mx.n_cols);
+      for (uword j = 0; j < m_y_mx.n_cols; j++) {
+        X_tmp.submat(j * m_delta.n_rows, j, (j + 1) * m_delta.n_rows - 1, j) =
+          X_pred.submat(i, j, i + m_delta.n_rows - 1, j);
+      }
+      X_pred.row(m_delta.n_rows + i) = mvnrnd(X_tmp.t() * m_beta_draw, m_Sigma).t();
     }
+    m_post_sample.slice(n) = X_pred.tail_rows(step_ahead);
   }
   void normalize_avg(const int &iterations, const int &burn) {
     double n = iterations - burn;
@@ -244,9 +257,11 @@ public:
   }
   mat get_X_alpha () { return mat(m_X_alpha); }
 
+  // create block diagional matrix of predictions
+
   // SAMPLER
-  void sample(const bool &RATS, const double &blocks, const int &iterations, const int &burn,
-    const bool &point, const bool &get_post, const bool &update_w) {
+  void sample(const bool &RATS, const double &blocks, const int &iterations, const int &burn, const int &step_ahead,
+    const bool &post_par, const bool &post_pred, const bool &update_w) {
     List out(5);
     // helpers
     mat Kron_hlpr(m_X_block.n_rows, m_X_block.n_rows, fill::eye);
@@ -254,11 +269,12 @@ public:
     set_Wishart_hp(RATS);
     // initial draws
     set_initial_draws();
-    if (point) {
-      initialize_avg();
+    if (post_par) {
+      initialize_lists(iterations, burn);
     } else {
-      initialize_lists(iterations, burn, get_post);
+      initialize_avg();
     }
+    if (post_pred) initialize_post_sample(iterations, burn, step_ahead);
     GRR_update();
     mat chol_U_inv_Sigma = chol(m_inv_Sigma);
     mat chol_U_Inv_Sigma = kron(chol_U_inv_Sigma, Kron_hlpr);
@@ -273,21 +289,23 @@ public:
       chol_U_inv_Sigma = chol(m_inv_Sigma);
       chol_U_Inv_Sigma = kron(chol_U_inv_Sigma, Kron_hlpr);
       if (iter >= burn) {
-        if (point) {
-          update_avg();
+        if (post_par || post_pred) compute_Sigma();
+        if (post_par) {
+          update_lists(iter, burn);
         } else {
-          update_lists(iter, burn, get_post);
+          update_avg();
         }
+        if (post_pred) update_post_sample(iter, burn, step_ahead);
       }
     }
-    if (point) {
+    if (!post_par) {
       normalize_avg(iterations, burn);
     }
   }
 
-  List prep_output (const bool &point, const bool &get_post) {
+  List show_estimates (const bool &post_par, const bool &post_pred) {
     List out;
-    if (point) {
+    if (!post_par && !post_pred) { // only point estimates of pars
       out = List::create(
         _["beta"] = m_beta_avg,
         _["kappa"] = m_kappa_avg,
@@ -295,25 +313,35 @@ public:
         _["omega"] = m_w_avg,
         _["Sigma"] = inv_sympd(m_inv_Sigma_avg)
       );
-    } else {
-      if(get_post) {
-        out = List::create(
-          _["beta"] = m_beta_list,
-          _["kappa"] = m_kappa_list,
-          _["tau.sq"] = m_tau_sq_list,
-          _["omega"] = m_w_list,
-          _["Sigma"] = m_Sigma_list,
-          _["posterior.sample"] = m_post_sample
-        );
-      } else {
-        out = List::create(
-          _["beta"] = m_beta_list,
-          _["kappa"] = m_kappa_list,
-          _["tau.sq"] = m_tau_sq_list,
-          _["omega"] = m_w_list,
-          _["Sigma"] = m_Sigma_list
-        );
-      }
+    }
+    if (post_par && !post_pred) { // only post distributions of pars
+      out = List::create(
+        _["beta"] = m_beta_list,
+        _["kappa"] = m_kappa_list,
+        _["tau.sq"] = m_tau_sq_list,
+        _["omega"] = m_w_list,
+        _["Sigma"] = m_Sigma_list
+      );
+    }
+    if (!post_par && post_pred) { // point estimates of pars and posterior predictive
+      out = List::create(
+        _["beta"] = m_beta_avg,
+        _["kappa"] = m_kappa_avg,
+        _["tau.sq"] = 1 / m_inv_tau_sq_avg,
+        _["omega"] = m_w_avg,
+        _["Sigma"] = inv_sympd(m_inv_Sigma_avg),
+        _["posterior.sample"] = m_post_sample
+      );
+    }
+    if(post_par && post_pred) { // posterior of pars and predictive
+      out = List::create(
+        _["beta"] = m_beta_list,
+        _["kappa"] = m_kappa_list,
+        _["tau.sq"] = m_tau_sq_list,
+        _["omega"] = m_w_list,
+        _["Sigma"] = m_Sigma_list,
+        _["posterior.sample"] = m_post_sample
+      );
     }
     return out;
   }
@@ -346,8 +374,8 @@ mat JBU_X_alpha(const mat &X_block, const mat &y_mx, const int &K) {
 // [[Rcpp::export]]
 List JBU_sample(const mat &X_block, const mat &y_mx, const int &K,
   const bool RATS = true, const double blocks = 1,
-  const int iterations = 1000, const int burn = 200,
-  const bool point = true, const bool get_post = false, const bool update_w = true
+  const int iterations = 1000, const int burn = 200, const int step_ahead = 4,
+  const bool post_par = false, const bool post_pred = false, const bool update_w = true
 ) {
   List out;
   JBU_model mod;
@@ -355,7 +383,7 @@ List JBU_sample(const mat &X_block, const mat &y_mx, const int &K,
   mod.set_y_mx(y_mx);
   mod.filter(K);
   mod.fill_X_alpha();
-  mod.sample(RATS, blocks, iterations, burn, point, get_post, update_w);
-  out = mod.prep_output(point, get_post);
+  mod.sample(RATS, blocks, iterations, burn, step_ahead, post_par, post_pred, update_w);
+  out = mod.show_estimates(post_par, post_pred);
   return out;
 }
