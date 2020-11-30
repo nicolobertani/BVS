@@ -171,7 +171,7 @@ class JBU_model {
     m_w_avg += m_w;
     m_inv_Sigma_avg += m_inv_Sigma;
   }
-  void normalize_avg (const int &iterations, const int &burn) {
+  void normalize_avg(const int &iterations, const int &burn) {
     double n = iterations - burn;
     m_beta_avg /= n;
     m_kappa_avg /= n;
@@ -251,13 +251,17 @@ public:
     }
   }
   List prep_output (const bool point) {
-    List out(5);
+    List out;
     if (point) {
-      out(0) = m_beta_avg;
-      out(1) = m_kappa_avg;
-      out(2) = 1 / m_inv_tau_sq_avg;
-      out(3) = m_w_avg;
-      out(4) = m_inv_Sigma_avg.i();
+      out = List::create(
+        _["beta"] = m_beta_avg,
+        _["kappa"] = m_kappa_avg,
+        _["tau.sq"] = 1 / m_inv_tau_sq_avg,
+        _["omega"] = m_w_avg,
+        _["Sigma"] = inv_sympd(m_inv_Sigma_avg)
+      );
+    } else {
+
     }
     return out;
   }
@@ -289,7 +293,7 @@ mat JBU_X_alpha(const mat &X_block, const mat &y_mx, const int &K) {
 
 // [[Rcpp::export]]
 List JBU_sample(const mat &X_block, const mat &y_mx, const int &K,
-  const bool RATS = 1, const double blocks = 1,
+  const bool RATS = true, const double blocks = 1,
   const int iterations = 1000, const int burn = 200,
   const bool point = true
 ) {
