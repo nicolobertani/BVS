@@ -380,6 +380,7 @@ public:
     List out;
     if (!post_par && !post_pred) { // only point estimates of pars
       out = List::create(
+        _["delta.mx"] = m_delta,
         _["beta"] = m_beta_avg,
         _["kappa"] = m_kappa_avg,
         _["tau.sq"] = 1 / m_inv_tau_sq_avg,
@@ -389,6 +390,7 @@ public:
     }
     if (post_par && !post_pred) { // only post distributions of pars
       out = List::create(
+        _["delta.mx"] = m_delta,
         _["beta"] = m_beta_list,
         _["kappa"] = m_kappa_list,
         _["tau.sq"] = m_tau_sq_list,
@@ -398,6 +400,7 @@ public:
     }
     if (!post_par && post_pred) { // point estimates of pars and posterior predictive
       out = List::create(
+        _["delta.mx"] = m_delta,
         _["beta"] = m_beta_avg,
         _["kappa"] = m_kappa_avg,
         _["tau.sq"] = 1 / m_inv_tau_sq_avg,
@@ -408,6 +411,7 @@ public:
     }
     if(post_par && post_pred) { // posterior of pars and predictive
       out = List::create(
+        _["delta.mx"] = m_delta,
         _["beta"] = m_beta_list,
         _["kappa"] = m_kappa_list,
         _["tau.sq"] = m_tau_sq_list,
