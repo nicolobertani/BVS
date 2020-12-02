@@ -44,8 +44,20 @@ public:
             else if (i == pos) std::cout << ">";
             else std::cout << incomplete_char;
         }
-        std::cout << "] " << int(progress * 100.0) << "% "
-                  << float(time_elapsed) / 1000.0 << "s\r";
+        int cent_secs = std::round(float(time_elapsed) / 10.0);
+        int secs = std::floor(float(time_elapsed) / 1000.0);
+        int mins = std::floor(float(time_elapsed) / 60000.0);
+        int hours = std::floor(float(time_elapsed) / 3600000.0);
+        std::cout << "] " << int(progress * 100.0) << "%  -  "
+                  << hours << "h "
+                  << int(mins - std::floor(mins / 60.0) * 60.0) << "m ";
+        int secs_out = int(secs - std::floor(secs / 60.0) * 60.0);
+        if (secs_out < 10) {
+          std::cout << " " << secs_out << ".";
+        } else {
+          std::cout << secs_out << ".";
+        }
+        std::cout<< int(cent_secs - std::floor(cent_secs / 100.0) * 100.0) << "s\r";
         std::cout.flush();
     }
 
@@ -322,7 +334,7 @@ public:
   void sample(const bool &RATS, const double &blocks, const int &iterations, const int &burn, const int &step_ahead,
     const bool &post_par, const bool &post_pred, const bool &update_w) {
     List out(5);
-    ProgressBar pbar(iterations, 100);
+    ProgressBar pbar(iterations, 70);
     // helpers
     mat Kron_hlpr(m_X_block.n_rows, m_X_block.n_rows, fill::eye);
     // hyperparameters Wishart
