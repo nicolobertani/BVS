@@ -1,38 +1,64 @@
 #include <RcppArmadillo.h>
 // [[Rcpp::depends(RcppArmadillo)]]
+#include <chrono>
+#include <iostream>
+
 
 using namespace Rcpp;
 using namespace arma;
 
-// r drawing functions
-vec r_binom(const int &n, const vec &p) {
-  Function r_binom("rbinom");
-  NumericVector tmp = r_binom(_["n"] = n, _["size"] = 1, _["prob"] = p);
-  vec out(p.n_elem);
-  for (uword i = 0; i < p.n_elem; i++) {
-    out(i) = tmp[i];
-  }
-  return out;
-}
 
-vec r_gamma(const int &n, const double &shape, const vec &rate) {
-  Function r_gamma("rgamma");
-  NumericVector tmp = r_gamma(_["n"] = n, _["shape"] = shape, _["rate"] = rate);
-  vec out(rate.n_elem);
-  for (uword i = 0; i < rate.n_elem; i++) {
-    out(i) = tmp[i];
-  }
-  return out;
-}
+/*
+Credit to Prakhar Srivastav
+https://github.com/prakhar1989/progress-cpp, wih minor changes
+*/
+class ProgressBar {
+private:
+    unsigned int ticks = 0;
 
-double r_beta(const double &v, const double &V) {
-  Function r_beta("rbeta");
-  NumericVector out = r_beta(1, _["shape1"] = v, _["shape2"] = V);
-  return out[0];
-}
+    const unsigned int total_ticks;
+    const unsigned int bar_width;
+    const char complete_char = '=';
+    const char incomplete_char = ' ';
+    const std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
+
+public:
+    ProgressBar(unsigned int total, unsigned int width, char complete, char incomplete) :
+            total_ticks{total}, bar_width{width}, complete_char{complete}, incomplete_char{incomplete} {}
+
+    ProgressBar(unsigned int total, unsigned int width) : total_ticks{total}, bar_width{width} {}
+
+    unsigned int operator++() { return ++ticks; }
+
+    void display() const {
+        float progress = (float) ticks / total_ticks;
+        int pos = (int) (bar_width * progress);
+
+        std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+        auto time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
+
+        std::cout << "[";
+
+        for (int i = 0; i < bar_width; ++i) {
+            if (i < pos) std::cout << complete_char;
+            else if (i == pos) std::cout << ">";
+            else std::cout << incomplete_char;
+        }
+        std::cout << "] " << int(progress * 100.0) << "% "
+                  << float(time_elapsed) / 1000.0 << "s\r";
+        std::cout.flush();
+    }
+
+    void done() const {
+        display();
+        std::cout << std::endl;
+    }
+};
+
 
 
 class JBU_model {
+private:
 
   mat m_X_block, m_y_mx;
   umat m_delta;
@@ -59,6 +85,33 @@ class JBU_model {
   // sampler storage - posterior sample
   cube m_post_sample;
 
+  // R SAMPLE DRAWING FUNCTIONS
+  vec r_binom(const int &n, const vec &p) {
+    Function r_binom("rbinom");
+    NumericVector tmp = r_binom(_["n"] = n, _["size"] = 1, _["prob"] = p);
+    vec out(p.n_elem);
+    for (uword i = 0; i < p.n_elem; i++) {
+      out(i) = tmp[i];
+    }
+    return out;
+  }
+
+  vec r_gamma(const int &n, const double &shape, const vec &rate) {
+    Function r_gamma("rgamma");
+    NumericVector tmp = r_gamma(_["n"] = n, _["shape"] = shape, _["rate"] = rate);
+    vec out(rate.n_elem);
+    for (uword i = 0; i < rate.n_elem; i++) {
+      out(i) = tmp[i];
+    }
+    return out;
+  }
+
+  double r_beta(const double &v, const double &V) {
+    Function r_beta("rbeta");
+    NumericVector out = r_beta(1, _["shape1"] = v, _["shape2"] = V);
+    return out[0];
+  }
+
   // FILTER
   /* calculate individual approximate posterior probability
   to be used in the loop in the filter */
@@ -70,7 +123,8 @@ class JBU_model {
     B = yTy - pow(a_N, 2) * inv_A_N;
     return log(A_N) - (m_X_block.n_rows - 1) * log(B);
   }
-  // SAMPLER
+
+  // SAMPLERS
   void set_Wishart_hp (const bool &RATS) {
     if (RATS) {
       m_v_0 = m_y_mx.n_cols * (m_delta.n_rows + 1) - 2; //RATS
@@ -199,14 +253,17 @@ class JBU_model {
   }
   void update_post_sample(const int &iter, const int &burn, const int &step_ahead) {
     uword n = iter - burn;
-    mat X_pred(m_delta.n_rows + step_ahead, m_y_mx.n_cols, fill::zeros);
+    int lags = m_delta.n_rows / m_y_mx.n_cols;
+    mat X_pred(lags + step_ahead, m_y_mx.n_cols, fill::zeros);
     X_pred.head_rows(m_delta.n_rows) = m_y_mx.tail_rows(m_delta.n_rows);
+    cout << X_pred << "\n";
     for (uword i = 0; i < step_ahead; i++) {
       sp_mat X_tmp(m_delta.n_rows * m_y_mx.n_cols, m_y_mx.n_cols);
       for (uword j = 0; j < m_y_mx.n_cols; j++) {
         X_tmp.submat(j * m_delta.n_rows, j, (j + 1) * m_delta.n_rows - 1, j) =
-          X_pred.submat(i, j, i + m_delta.n_rows - 1, j);
+          reverse(X_pred.submat(i, j, i + m_delta.n_rows - 1, j), 1);
       }
+      cout << mat(X_tmp) << "\n";
       X_pred.row(m_delta.n_rows + i) = mvnrnd(X_tmp.t() * m_beta_draw, m_Sigma).t();
     }
     m_post_sample.slice(n) = X_pred.tail_rows(step_ahead);
@@ -228,6 +285,8 @@ public:
   mat get_X_block () { return m_X_block; }
   void set_y_mx (mat value) { m_y_mx = value ;}
   mat get_y_mx () { return m_y_mx; }
+  double get_v_0 () { return m_v_0; }
+  mat get_S_0 () { return m_S_0; }
 
   // approximate Dirac filter: populate m_delta
   void filter (const int &K) {
@@ -263,6 +322,7 @@ public:
   void sample(const bool &RATS, const double &blocks, const int &iterations, const int &burn, const int &step_ahead,
     const bool &post_par, const bool &post_pred, const bool &update_w) {
     List out(5);
+    ProgressBar pbar(iterations, 100);
     // helpers
     mat Kron_hlpr(m_X_block.n_rows, m_X_block.n_rows, fill::eye);
     // hyperparameters Wishart
@@ -280,6 +340,7 @@ public:
     mat chol_U_Inv_Sigma = kron(chol_U_inv_Sigma, Kron_hlpr);
     vec y_vec = vectorise(m_y_mx);
     for (size_t iter = 0; iter < iterations; iter++) {
+      ++pbar;
       beta_update(chol_U_Inv_Sigma, y_vec, blocks);
       kappa_update();
       inv_tau_sq_update();
@@ -297,10 +358,12 @@ public:
         }
         if (post_pred) update_post_sample(iter, burn, step_ahead);
       }
+      pbar.display();
     }
     if (!post_par) {
       normalize_avg(iterations, burn);
     }
+    pbar.done();
   }
 
   List show_estimates (const bool &post_par, const bool &post_pred) {
