@@ -329,9 +329,10 @@ public:
   // create block diagional matrix of predictions
 
   // SAMPLER
-  void sample(const bool &RATS, const double &blocks, const int &iterations, const int &burn, const int &step_ahead,
-    const bool &post_par, const bool &post_pred, const bool &update_w) {
-    List out(5);
+  void sample(const bool &RATS, const double &blocks,
+    const int &iterations, const int &burn, const int &step_ahead,
+    const bool &post_par, const bool &post_pred, const bool &update_w
+  ) {
     ProgressBar pbar(iterations, 70);
     // helpers
     mat Kron_hlpr(m_X_block.n_rows, m_X_block.n_rows, fill::eye);
@@ -370,9 +371,7 @@ public:
       }
       pbar.display();
     }
-    if (!post_par) {
-      normalize_avg(iterations, burn);
-    }
+    if (!post_par) normalize_avg(iterations, burn);
     pbar.done();
   }
 
@@ -452,7 +451,7 @@ mat JBU_X_alpha(const mat &X_block, const mat &y_mx, const int &K) {
 List JBU_sample(const mat &X_block, const mat &y_mx, const int &K,
   const bool RATS = true, const double blocks = 1,
   const int iterations = 1000, const int burn = 200, const int step_ahead = 4,
-  const bool post_par = false, const bool post_pred = false, const bool update_w = true
+  const bool post_par = true, const bool post_pred = true, const bool update_w = true
 ) {
   List out;
   JBU_model mod;
