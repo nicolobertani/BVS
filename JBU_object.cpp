@@ -265,18 +265,16 @@ private:
   }
   void update_post_sample(const int &iter, const int &burn, const int &step_ahead) {
     uword n = iter - burn;
-    int lags = m_delta.n_rows / m_y_mx.n_cols;
+    int lags = m_X_block.n_cols / m_y_mx.n_cols;
     mat X_pred(lags + step_ahead, m_y_mx.n_cols, fill::zeros);
-    X_pred.head_rows(m_delta.n_rows) = m_y_mx.tail_rows(m_delta.n_rows);
-    cout << X_pred << "\n";
+    X_pred.head_rows(lags) = m_y_mx.tail_rows(lags);
     for (uword i = 0; i < step_ahead; i++) {
       sp_mat X_tmp(m_delta.n_rows * m_y_mx.n_cols, m_y_mx.n_cols);
+      vec x_tmp = vectorise(reverse(X_pred.rows(i, i + lags - 1), 0));
       for (uword j = 0; j < m_y_mx.n_cols; j++) {
-        X_tmp.submat(j * m_delta.n_rows, j, (j + 1) * m_delta.n_rows - 1, j) =
-          reverse(X_pred.submat(i, j, i + m_delta.n_rows - 1, j), 1);
+        X_tmp.submat(j * m_delta.n_rows, j, (j + 1) * m_delta.n_rows - 1, j) = x_tmp.elem(m_delta.col(j));
       }
-      cout << mat(X_tmp) << "\n";
-      X_pred.row(m_delta.n_rows + i) = mvnrnd(X_tmp.t() * m_beta_draw, m_Sigma).t();
+      X_pred.row(lags + i) = mvnrnd(X_tmp.t() * m_beta_draw, m_Sigma).t();
     }
     m_post_sample.slice(n) = X_pred.tail_rows(step_ahead);
   }
