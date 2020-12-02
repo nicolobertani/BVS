@@ -89,7 +89,7 @@ private:
   // sampler storage - average
   double m_w_avg;
   vec m_kappa_avg, m_inv_tau_sq_avg, m_beta_avg;
-  mat m_inv_Sigma_avg;
+  mat m_Sigma_avg;
   // sampler storage - distributions
   vec m_w_list;
   mat m_kappa_list, m_tau_sq_list, m_beta_list;
@@ -164,8 +164,8 @@ private:
     m_kappa_avg.zeros();
     m_inv_tau_sq_avg.copy_size(m_inv_tau_sq_draw);
     m_inv_tau_sq_avg.zeros();
-    m_inv_Sigma_avg.copy_size(m_inv_Sigma);
-    m_inv_Sigma_avg.zeros();
+    m_Sigma_avg.copy_size(m_inv_Sigma);
+    m_Sigma_avg.zeros();
   }
   void initialize_lists (const int &iterations, const int &burn) {
     int n = iterations - burn;
@@ -253,7 +253,7 @@ private:
     m_kappa_avg += m_kappa_draw;
     m_inv_tau_sq_avg += m_inv_tau_sq_draw;
     m_w_avg += m_w;
-    m_inv_Sigma_avg += m_inv_Sigma;
+    m_Sigma_avg += m_Sigma;
   }
   void update_lists(const int &iter, const int &burn) {
     uword n = iter - burn;
@@ -284,7 +284,7 @@ private:
     m_kappa_avg /= n;
     m_inv_tau_sq_avg /= n;
     m_w_avg /= n;
-    m_inv_Sigma_avg /= n;
+    m_Sigma_avg /= n;
   }
 
 
@@ -360,7 +360,7 @@ public:
       chol_U_inv_Sigma = chol(m_inv_Sigma);
       chol_U_Inv_Sigma = kron(chol_U_inv_Sigma, Kron_hlpr);
       if (iter >= burn) {
-        if (post_par || post_pred) compute_Sigma();
+        compute_Sigma();
         if (post_par) {
           update_lists(iter, burn);
         } else {
@@ -385,7 +385,7 @@ public:
         _["kappa"] = m_kappa_avg,
         _["tau.sq"] = 1 / m_inv_tau_sq_avg,
         _["omega"] = m_w_avg,
-        _["Sigma"] = inv_sympd(m_inv_Sigma_avg)
+        _["Sigma"] = m_Sigma_avg
       );
     }
     if (post_par && !post_pred) { // only post distributions of pars
@@ -405,7 +405,7 @@ public:
         _["kappa"] = m_kappa_avg,
         _["tau.sq"] = 1 / m_inv_tau_sq_avg,
         _["omega"] = m_w_avg,
-        _["Sigma"] = inv_sympd(m_inv_Sigma_avg),
+        _["Sigma"] = m_Sigma_avg,
         _["posterior.sample"] = m_post_sample
       );
     }
