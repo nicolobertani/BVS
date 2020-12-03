@@ -333,12 +333,21 @@ public:
 
   // create block diagional matrix of predictions
 
+  // calculate optimal number of blocks
+  double good_blocks () {
+    double n = m_delta.n_elem;
+    double big_term = pow(9 * n + sqrt(3 * (-1 + 27 * pow(n, 2))), .333333);
+    double opt_B = 1 / (pow(3, .333333) * big_term) + big_term / pow(3, .666666);
+    return floor(opt_B);
+  }
+
   // SAMPLER
   void sample(const bool &RATS, const double &blocks,
     const int &iterations, const int &burn, const int &step_ahead,
     const bool &post_par, const bool &post_pred, const bool &update_w
   ) {
     ProgressBar pbar(iterations, 70);
+    pbar.display();
     // helpers
     mat Kron_hlpr(m_X_block.n_rows, m_X_block.n_rows, fill::eye);
     vec y_vec = vectorise(m_y_mx);
@@ -452,7 +461,7 @@ mat JBU_X_alpha(const mat &X_block, const mat &y_mx, const int &K) {
 
 // [[Rcpp::export]]
 List JBU_sample(const mat &X_block, const mat &y_mx, const int &K,
-  const bool RATS = true, const double blocks = 1,
+  const bool RATS = true, double blocks = 1, const bool suggest_blocks = false,
   const int iterations = 1000, const int burn = 200, const int step_ahead = 4,
   const bool post_par = true, const bool post_pred = true, const bool update_w = true
 ) {
@@ -462,6 +471,10 @@ List JBU_sample(const mat &X_block, const mat &y_mx, const int &K,
   mod.set_y_mx(y_mx);
   mod.filter(K);
   mod.fill_X_alpha();
+  if (suggest_blocks) {
+    blocks = mod.good_blocks();
+    std::cout << "using " << blocks << " block(s).\n";
+}
   mod.sample(RATS, blocks, iterations, burn, step_ahead, post_par, post_pred, update_w);
   out = mod.show_estimates(post_par, post_pred);
   return out;
