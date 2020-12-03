@@ -85,7 +85,7 @@ private:
   mat m_S_0;
   // sampler draws
   vec m_kappa_draw, m_inv_tau_sq_draw, m_beta_draw;
-  mat m_inv_Sigma, m_GRR_mx, m_Sigma;
+  mat m_inv_Sigma, m_GRR_mx, m_Sigma, m_chol_U_inv_Sigma;
   // sampler storage - average
   double m_w_avg;
   vec m_kappa_avg, m_inv_tau_sq_avg, m_beta_avg;
@@ -179,7 +179,8 @@ private:
     m_post_sample.set_size(step_ahead, m_y_mx.n_cols, iterations - burn);
   }
   // update functions
-  void beta_update(const mat &chol_U_Inv_Sigma, const vec &y_vec, const double &blocks) {
+  void beta_update(const mat &Kron_hlpr, const vec &y_vec, const double &blocks) {
+    mat chol_U_Inv_Sigma = kron(m_chol_U_inv_Sigma, Kron_hlpr);
     mat UX = chol_U_Inv_Sigma * m_X_alpha;
     vec U_y_vec = chol_U_Inv_Sigma * y_vec;
     double q = ceil(m_delta.n_elem / blocks);
@@ -245,7 +246,11 @@ private:
     // draw
     m_inv_Sigma = wishrnd(inv_S_N, v_N);
   }
-  void compute_Sigma() {m_Sigma = inv_sympd(m_inv_Sigma);}
+  void compute_chol_inv_Sigma() {m_chol_U_inv_Sigma = chol(m_inv_Sigma);;}
+  void compute_Sigma() {
+    mat chol_U_Sigma = inv(trimatu(m_chol_U_inv_Sigma));
+    m_Sigma = chol_U_Sigma * chol_U_Sigma.t();
+  }
 
   // STORE SAMPLES
   void update_avg() {
@@ -336,6 +341,7 @@ public:
     ProgressBar pbar(iterations, 70);
     // helpers
     mat Kron_hlpr(m_X_block.n_rows, m_X_block.n_rows, fill::eye);
+    vec y_vec = vectorise(m_y_mx);
     // hyperparameters Wishart
     set_Wishart_hp(RATS);
     // initial draws
@@ -347,19 +353,15 @@ public:
     }
     if (post_pred) initialize_post_sample(iterations, burn, step_ahead);
     GRR_update();
-    mat chol_U_inv_Sigma = chol(m_inv_Sigma);
-    mat chol_U_Inv_Sigma = kron(chol_U_inv_Sigma, Kron_hlpr);
-    vec y_vec = vectorise(m_y_mx);
+    compute_chol_inv_Sigma();
     for (size_t iter = 0; iter < iterations; iter++) {
-      ++pbar;
-      beta_update(chol_U_Inv_Sigma, y_vec, blocks);
+      beta_update(Kron_hlpr, y_vec, blocks);
       kappa_update();
       inv_tau_sq_update();
       GRR_update();
       if (update_w) w_update();
       inv_Sigma_update(y_vec);
-      chol_U_inv_Sigma = chol(m_inv_Sigma);
-      chol_U_Inv_Sigma = kron(chol_U_inv_Sigma, Kron_hlpr);
+      compute_chol_inv_Sigma();
       if (iter >= burn) {
         compute_Sigma();
         if (post_par) {
@@ -369,6 +371,7 @@ public:
         }
         if (post_pred) update_post_sample(iter, burn, step_ahead);
       }
+      ++pbar;
       pbar.display();
     }
     if (!post_par) normalize_avg(iterations, burn);
