@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /*
 High performance Bayesian Variable Selection for R using C++ via Rcpp and RcppArmadillo
 Copyright (C) 2020  Nicolò Bertani
@@ -16,6 +17,10 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+=======
+#include "sampling_functions.h"
+#include "inclusion_functions.h"
+>>>>>>> 5a0b392 (restructured Dirac_SS_gP with inclusion_ and sampling_ headers)
 #include <RcppArmadillo.h>
 // [[Rcpp::depends(RcppArmadillo)]]
 
@@ -23,63 +28,8 @@ using namespace Rcpp;
 using namespace arma;
 
 
-double rcpp_ratio(const ivec &delta_vec, const int &delta_index, const mat &X, const vec &y, double sigma_sq, const double &g) {
-  // initial stuff
-  double log_output;
-  double out;
-  // generate with input
-  ivec d_with = delta_vec;
-  d_with(delta_index) = 1;
-  int k_with = sum(d_with);
-  uvec col_id_with(k_with);
-  int j = 0;
-  for (size_t i = 0; i < delta_vec.n_elem; i++) {
-    if (d_with(i) == 1) {
-      col_id_with(j) = i;
-      j++;
-    }
-  }
-  mat X_with = X.cols(col_id_with);
-  // generate without input
-  ivec d_wout = delta_vec;
-  d_wout(delta_index) = 0;
-  int k_wout = sum(d_wout);
-  uvec col_id_wout(k_wout);
-  int h = 0;
-  for (size_t i = 0; i < delta_vec.n_elem; i++) {
-    if (d_wout(i) == 1) {
-      col_id_wout(h) = i;
-      h++;
-    }
-  }
-  mat X_wout = X.cols(col_id_wout);
-  // parameters with
-  mat inv_A_N_with = (g + 1) / g * X_with.t() * X_with;
-  mat A_N_with = inv_sympd(inv_A_N_with);
-  vec a_N_with = A_N_with * (X_with.t() * y);
-  // parameters without
-  if (k_wout == 0) {
-    log_output = - as_scalar(a_N_with.t() * inv_A_N_with * a_N_with) / sigma_sq + log(g + 1);
-  } else {
-    mat inv_A_N_wout = (g + 1) / g * X_wout.t() * X_wout;
-    mat A_N_wout = inv_sympd(inv_A_N_wout);
-    vec a_N_wout = A_N_wout * (X_wout.t() * y);
-    log_output = - as_scalar(a_N_with.t() * inv_A_N_with * a_N_with - a_N_wout.t() * inv_A_N_wout * a_N_wout) / sigma_sq + log(g + 1);
-  }
-  // output
-  out = exp(log_output / 2);
-  return out;
-}
-
-double r_beta(const double &v, const double &V) {
-  Function r_beta("rbeta");
-  NumericVector out = r_beta(1, _["shape1"] = v, _["shape2"] = V);
-  return out[0];
-}
-
-
 // [[Rcpp::export]]
-List rcpp_Dirac_SS_g(const mat &X, const vec &y, const int &n_samples, const double &burn_in,
+List Dirac_SS_g(const mat &X, const vec &y, const int &n_samples, const double &burn_in,
   const double s_0 = .001, const double S_0 = .001,
   const bool update_g = 0, const double fixed_g = 1, const double b_0 = .5, const double B_0 = .5,
   const bool update_omega = 1, const double fixed_omega = .5, const double v_0 = 1, const double V_0 = 1
@@ -124,7 +74,7 @@ List rcpp_Dirac_SS_g(const mat &X, const vec &y, const int &n_samples, const dou
     // sample active coefficients
     k_perm = randperm(k);
     for (int i = 0; i < k; i++) {
-      pip = 1 / (1 + rcpp_ratio(delta_vec, k_perm(i), X, y, sigma_sq_draw, g_draw) * (1 - fixed_omega) / fixed_omega);
+      pip = 1 / (1 + gP_ratio(delta_vec, k_perm(i), X, y, sigma_sq_draw, g_draw) * (1 - fixed_omega) / fixed_omega);
       delta_vec(k_perm(i)) = randu() < pip;
     }
     active_size = sum(delta_vec);
