@@ -14,7 +14,7 @@ double inclusion_ratio(
 ) {
   // initial stuff
   double log_output, out;
-  arma::ivec d_with, d_wout = delta_vec;
+  arma::ivec d_with = delta_vec, d_wout = delta_vec;
   // generate with input
   d_with(delta_index) = 1;
   int k_with = arma::sum(d_with);
@@ -92,10 +92,6 @@ double inclusion_ratio(
       }
       break;
     }
-    // default
-    default:
-      std::cout << "the beta prior you specified is not correct!";
-      break;
   }
   // output
   out = std::exp(log_output / 2);
