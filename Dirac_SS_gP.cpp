@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 /*
 High performance Bayesian Variable Selection for R using C++ via Rcpp and RcppArmadillo
 Copyright (C) 2020  Nicolò Bertani
@@ -17,10 +16,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-=======
 #include "sampling_functions.h"
 #include "inclusion_functions.h"
->>>>>>> 5a0b392 (restructured Dirac_SS_gP with inclusion_ and sampling_ headers)
 #include <RcppArmadillo.h>
 // [[Rcpp::depends(RcppArmadillo)]]
 

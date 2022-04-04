@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 /*
 High performance Bayesian Variable Selection for R using C++ via Rcpp and RcppArmadillo
 Copyright (C) 2020  Nicolò Bertani
@@ -17,10 +16,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-=======
 #include "sampling_functions.h"
 #include "inclusion_functions.h"
->>>>>>> b800660 (moved ratio function of independent Dirac SS to header)
 #include <RcppArmadillo.h>
 // [[Rcpp::depends(RcppArmadillo)]]
 
@@ -29,11 +26,7 @@ using namespace arma;
 
 
 // [[Rcpp::export]]
-<<<<<<< HEAD
-List rcpp_Dirac_SS_i(const mat &X, const vec &y, const int &n_samples, const double &burn_in,
-=======
 List Dirac_SS_I(const mat &X, const vec &y, const int &n_samples, const double &burn_in,
->>>>>>> b800660 (moved ratio function of independent Dirac SS to header)
   const double s_0 = .001, const double S_0 = .001,
   const bool update_psi = 1, const double fixed_psi = 1, const double b_0 = .5, const double B_0 = .5,
   const bool update_omega = 1, const double fixed_omega = .5, const double v_0 = 1, const double V_0 = 1
