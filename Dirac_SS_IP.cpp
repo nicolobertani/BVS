@@ -79,7 +79,7 @@ List Dirac_SS_I(const mat &X, const vec &y, const int &n_samples, const double &
     // sample active coefficients
     k_perm = randperm(k);
     for (int i = 0; i < k; i++) {
-      pip = 1 / (1 + rcpp_ratio(delta_vec, k_perm(i), X, y, sigma_sq_draw, psi_draw) * (1 - fixed_omega) / fixed_omega);
+      pip = 1 / (1 + IP_ratio(delta_vec, k_perm(i), X, y, sigma_sq_draw, psi_draw) * (1 - fixed_omega) / fixed_omega);
       delta_vec(k_perm(i)) = randu() < pip;
     }
     active_size = sum(delta_vec);
