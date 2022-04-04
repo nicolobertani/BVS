@@ -3,6 +3,7 @@
 
 #include <armadillo>
 
+/*
 // independent prior inclusion ratio
 double IP_ratio(
   const arma::ivec &delta_vec, const int &delta_index,
@@ -118,13 +119,15 @@ double gP_ratio(
   out = std::exp(log_output / 2);
   return out;
 }
+*/
 
 // general inclusion ratio function
 double inclusion_ratio(
   const arma::ivec &delta_vec, const int &delta_index,
   const arma::mat &X, const arma::vec &y,
-  const double& sigma_sq, const double &g,
-  const char prior = "independent"
+  const double & sigma_sq,
+  const double psi = 1, const double g = 1,
+  const int prior = 'i'
 ) {
   // initial stuff
   double log_output, out;
@@ -157,7 +160,8 @@ double inclusion_ratio(
   switch (prior)
   {
     // independent prior
-    case "independent" :
+    case 'i':
+    {
       // parameters with
       arma::vec inv_A_0_with_v(k_with);
       inv_A_0_with_v.fill(1 / psi);
@@ -181,9 +185,11 @@ double inclusion_ratio(
         - arma::as_scalar(a_N_with.t() * inv_A_N_with * a_N_with - a_N_wout.t() * inv_A_N_wout * a_N_wout) / sigma_sq
         + std::log(psi * arma::det(A_N_wout) / arma::det(A_N_with));
       }
-      return;
+      break;
+    }
     // g-prior
-    case "g" :
+    case 'g':
+    {
       // parameters with
       arma::mat inv_A_N_with = (g + 1) / g * X_with.t() * X_with;
       arma::mat A_N_with = arma::inv_sympd(inv_A_N_with);
@@ -201,11 +207,12 @@ double inclusion_ratio(
         - arma::as_scalar(a_N_with.t() * inv_A_N_with * a_N_with - a_N_wout.t() * inv_A_N_wout * a_N_wout) / sigma_sq
         + std::log(g + 1);
       }
-      return;
+      break;
+    }
     // default
-    default :
+    default:
       std::cout << "the beta prior you specified is not correct!";
-      return;
+      break;
   }
   // output
   out = std::exp(log_output / 2);
